@@ -1,0 +1,27 @@
+# generated directories
+/build/
+frontend/node_modules/
+frontend/dist/
+release/
+
+# logs and temp files
+*.log
+*.tmp
+
+# WebView2 SDK content not needed for x64 builds
+backend/third_party/webview2/build/native/arm64/
+backend/third_party/webview2/build/native/x86/
+backend/third_party/webview2/buildTransitive/
+backend/third_party/webview2/lib/
+backend/third_party/webview2/lib_manual/
+backend/third_party/webview2/package/
+backend/third_party/webview2/runtimes/
+backend/third_party/webview2/tools/
+backend/third_party/webview2/pkg.nupkg
+
+# local environment
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini
+.DS_Store
