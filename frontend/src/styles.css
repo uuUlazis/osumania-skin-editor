@@ -1516,6 +1516,257 @@ code {
   background: transparent;
 }
 
+/* ===== 皮肤预览 ===== */
+
+.editor-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.editor-body > .form-scroll {
+  min-width: 0;
+}
+
+.preview-pane {
+  flex: 0 0 clamp(360px, 44%, 760px);
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px 14px;
+  border-left: 1px solid var(--line);
+  background: var(--panel);
+  overflow-y: auto;
+}
+
+.preview-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.preview-head h3 {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.preview-chip {
+  font-size: 11px;
+  color: var(--sky);
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  border-radius: 999px;
+  padding: 1px 8px;
+}
+
+.preview-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.preview-toolbar button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 26px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.preview-toolbar button.active {
+  color: var(--accent);
+  border-color: var(--accent);
+  background: var(--accent-dim);
+}
+
+.preview-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.preview-field select {
+  height: 26px;
+  padding: 0 6px;
+}
+
+.preview-resizer {
+  flex: 0 0 7px;
+  position: relative;
+  cursor: col-resize;
+  background: transparent;
+  touch-action: none;
+}
+
+.preview-resizer::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 3px;
+  width: 1px;
+  background: var(--line);
+}
+
+.preview-resizer:hover::after,
+.preview-resizer:active::after {
+  left: 2px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.preview-stage-wrap {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #0d1013;
+  overflow: hidden;
+}
+
+.preview-stage {
+  display: block;
+  width: 100%;
+  height: auto;
+  user-select: none;
+}
+
+.preview-stage text {
+  font-family: "Segoe UI", "Microsoft YaHei UI", system-ui, sans-serif;
+}
+
+.pv-combo {
+  font-size: 30px;
+  font-weight: 700;
+  fill: #ffffff;
+  opacity: 0.9;
+}
+
+.pv-score {
+  font-size: 17px;
+  font-weight: 600;
+  fill: #ffd54a;
+  opacity: 0.9;
+}
+
+.pv-hud-score {
+  fill: #ffffff;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 0.8;
+  stroke-linejoin: round;
+}
+
+.pv-hud-acc {
+  fill: #ffffff;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 0.7;
+  stroke-linejoin: round;
+}
+
+.pv-hud-name {
+  fill: #ffffff;
+  font-weight: 600;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.75);
+  stroke-width: 0.9;
+  stroke-linejoin: round;
+}
+
+.pv-hud-value {
+  fill: #e6ebf2;
+  font-weight: 500;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.75);
+  stroke-width: 0.9;
+  stroke-linejoin: round;
+}
+
+.pv-combo-num {
+  fill: #ffffff;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.55);
+  stroke-width: 0.6;
+  stroke-linejoin: round;
+}
+
+.pv-combo-x {
+  fill: #ffffff;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 0.6;
+}
+
+.pv-judgement {
+  fill: #ffd54a;
+  font-weight: 700;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 0.7;
+}
+
+.pv-hud-time {
+  fill: #e2e8f0;
+  paint-order: stroke;
+  stroke: rgba(0, 0, 0, 0.7);
+  stroke-width: 0.7;
+}
+
+.preview-chip-name {
+  color: #9aa3ad;
+  background: rgba(255, 255, 255, 0.05);
+  border-color: var(--line);
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.preview-legend {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.preview-tip {
+  color: #7f8894;
+}
+
+.preview-empty {
+  padding: 24px 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+@media (max-width: 1280px) {
+  .preview-pane {
+    flex-basis: 320px;
+  }
+
+  .group-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 860px) {
   .skin-sidebar {
     width: 220px;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import {
   Check,
   ChevronDown,
@@ -15,6 +15,7 @@ import {
 import type { FieldSpec, SkinData, SkinStyle, StyleMap } from '../api/client';
 import { FieldControl, concreteKeys } from './fields';
 import { KeyTabs } from './KeyTabs';
+import { SkinPreview } from './SkinPreview';
 
 const GROUP_ORDER = [
   'common',
@@ -98,6 +99,11 @@ export function EditorPane({
   const [selectedStyle, setSelectedStyle] = useState('');
   const [styleInput, setStyleInput] = useState('');
   const [creatingNew, setCreatingNew] = useState(false);
+  const [previewWidth, setPreviewWidth] = useState<number | null>(() => {
+    const stored = window.localStorage.getItem('mania.previewWidth');
+    const parsed = stored ? Number(stored) : Number.NaN;
+    return Number.isFinite(parsed) && parsed >= 320 ? parsed : null;
+  });
   const block = skinData.blocks.find((item) => item.keys === activeKeys);
   const allKeys = skinData.blocks
     .map((item) => item.keys)
@@ -128,6 +134,78 @@ export function EditorPane({
       (field) => field.group === group && field.name !== 'Keys',
     ),
   })).filter((group) => group.specs.length > 0);
+
+  const fonts = useMemo(() => {
+    const parsed = {
+      scorePrefix: 'score',
+      comboPrefix: 'combo',
+      scoreOverlap: 0,
+      comboOverlap: 0,
+    };
+    let inFonts = false;
+    for (const line of (skinData.raw ?? '').split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('[')) {
+        inFonts = /^\[fonts\]/i.test(trimmed);
+        continue;
+      }
+      if (!inFonts) {
+        continue;
+      }
+      const match = trimmed.match(/^([A-Za-z]+)\s*:\s*(.*)$/);
+      if (!match) {
+        continue;
+      }
+      const key = match[1].toLowerCase();
+      const raw = match[2].trim();
+      if (key === 'scoreprefix' && raw !== '') {
+        parsed.scorePrefix = raw;
+      } else if (key === 'comboprefix' && raw !== '') {
+        parsed.comboPrefix = raw;
+      } else if (key === 'scoreoverlap') {
+        parsed.scoreOverlap = Number(raw) || 0;
+      } else if (key === 'combooverlap') {
+        parsed.comboOverlap = Number(raw) || 0;
+      }
+    }
+    return parsed;
+  }, [skinData.raw]);
+
+  const effectiveValues = useMemo(() => {
+    const current = skinData.blocks.find((item) => item.keys === activeKeys);
+    if (!current || activeKeys === null) {
+      return {};
+    }
+    return { ...current.values, ...(drafts[activeKeys] ?? {}) };
+  }, [activeKeys, drafts, skinData]);
+
+  useEffect(() => {
+    if (previewWidth !== null) {
+      window.localStorage.setItem('mania.previewWidth', String(Math.round(previewWidth)));
+    }
+  }, [previewWidth]);
+
+  function startPreviewResize(event: ReactMouseEvent<HTMLDivElement>) {
+    event.preventDefault();
+    const startX = event.clientX;
+    const pane = event.currentTarget.nextElementSibling as HTMLElement | null;
+    const startWidth = pane ? pane.getBoundingClientRect().width : 480;
+    const onMove = (moveEvent: MouseEvent) => {
+      // 左限界：给左侧皮肤列表(288) + 参数表单(380) 留出空间，预览不能被无限拉宽
+      const maxByForm = Math.max(320, window.innerWidth - 288 - 380);
+      const next = Math.max(
+        320,
+        Math.min(maxByForm, startWidth + (startX - moveEvent.clientX)),
+      );
+      setPreviewWidth(next);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
 
   function toggleGroup(group: string) {
     setCollapsed((current) => {
@@ -306,49 +384,83 @@ export function EditorPane({
         </div>
       )}
 
-      <div className="form-scroll">
-        {allKeys.length === 0 && (
-          <div className="empty-state">
-            该 skin.ini 中没有可编辑的 [Mania] 模块
-          </div>
-        )}
-        {allKeys.length > 0 && activeKeys === null && (
-          <div className="empty-state">请选择上方的一个键数模块</div>
-        )}
-        {activeKeys !== null &&
-          block &&
-          groups.map((group) => {
-            const isCollapsed = collapsed.has(group.key);
-            return (
-              <section className="field-group" key={group.key}>
-                <button
-                  type="button"
-                  className="group-toggle"
-                  onClick={() => toggleGroup(group.key)}
-                >
-                  {isCollapsed ? (
-                    <ChevronRight size={14} />
-                  ) : (
-                    <ChevronDown size={14} />
-                  )}
-                  <h3>{group.label}</h3>
-                  <span className="group-count">{group.specs.length}</span>
-                </button>
-                {!isCollapsed && (
-                  <div className="group-body">
-                    {group.specs.map((spec) => {
-                      const concrete = concreteKeys(spec, activeKeys);
-                      if (!spec.perColumn) {
-                        const key = spec.name;
-                        const present =
-                          Object.prototype.hasOwnProperty.call(
-                            block.values,
-                            key,
+      <div className="editor-body">
+        <div className="form-scroll">
+          {allKeys.length === 0 && (
+            <div className="empty-state">
+              该 skin.ini 中没有可编辑的 [Mania] 模块
+            </div>
+          )}
+          {allKeys.length > 0 && activeKeys === null && (
+            <div className="empty-state">请选择上方的一个键数模块</div>
+          )}
+          {activeKeys !== null &&
+            block &&
+            groups.map((group) => {
+              const isCollapsed = collapsed.has(group.key);
+              return (
+                <section className="field-group" key={group.key}>
+                  <button
+                    type="button"
+                    className="group-toggle"
+                    onClick={() => toggleGroup(group.key)}
+                  >
+                    {isCollapsed ? (
+                      <ChevronRight size={14} />
+                    ) : (
+                      <ChevronDown size={14} />
+                    )}
+                    <h3>{group.label}</h3>
+                    <span className="group-count">{group.specs.length}</span>
+                  </button>
+                  {!isCollapsed && (
+                    <div className="group-body">
+                      {group.specs.map((spec) => {
+                        const concrete = concreteKeys(spec, activeKeys);
+                        if (!spec.perColumn) {
+                          const key = spec.name;
+                          const present =
+                            Object.prototype.hasOwnProperty.call(
+                              block.values,
+                              key,
+                            );
+                          const value =
+                            drafts[activeKeys]?.[key] ?? block.values[key] ?? '';
+                          return (
+                            <div className="field-row" key={key}>
+                              <div className="field-label" title={spec.help}>
+                                <span>{spec.label}</span>
+                                <div className="label-meta">
+                                  <code>{displayKeyName(spec)}</code>
+                                  {spec.requiresVersion25 && (
+                                    <span className="v25-badge">需 2.5+</span>
+                                  )}
+                                </div>
+                                <MissingHint present={present} value={value} />
+                              </div>
+                              <div className="field-control">
+                                <FieldControl
+                                  spec={spec}
+                                  keys={activeKeys}
+                                  value={value}
+                                  onChange={(next) =>
+                                    onFieldChange(activeKeys, key, next)
+                                  }
+                                />
+                                {blockErrors[key] && (
+                                  <span className="field-error">
+                                    {blockErrors[key]}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
                           );
-                        const value =
-                          drafts[activeKeys]?.[key] ?? block.values[key] ?? '';
+                        }
                         return (
-                          <div className="field-row" key={key}>
+                          <div
+                            className="field-block"
+                            key={spec.name + spec.indexSuffix}
+                          >
                             <div className="field-label" title={spec.help}>
                               <span>{spec.label}</span>
                               <div className="label-meta">
@@ -357,85 +469,70 @@ export function EditorPane({
                                   <span className="v25-badge">需 2.5+</span>
                                 )}
                               </div>
-                              <MissingHint present={present} value={value} />
                             </div>
-                            <div className="field-control">
-                              <FieldControl
-                                spec={spec}
-                                keys={activeKeys}
-                                value={value}
-                                onChange={(next) =>
-                                  onFieldChange(activeKeys, key, next)
-                                }
-                              />
-                              {blockErrors[key] && (
-                                <span className="field-error">
-                                  {blockErrors[key]}
-                                </span>
-                              )}
+                            <div className="slot-grid">
+                              {concrete.map((key, index) => {
+                                const present =
+                                  Object.prototype.hasOwnProperty.call(
+                                    block.values,
+                                    key,
+                                  );
+                                const value =
+                                  drafts[activeKeys]?.[key] ??
+                                  block.values[key] ??
+                                  '';
+                                return (
+                                  <div className="slot-cell" key={key}>
+                                    <span className="slot-index">
+                                      {spec.indexStart + index}
+                                      <MissingHint
+                                        present={present}
+                                        value={value}
+                                      />
+                                    </span>
+                                    <FieldControl
+                                      spec={spec}
+                                      keys={activeKeys}
+                                      value={value}
+                                      onChange={(next) =>
+                                        onFieldChange(activeKeys, key, next)
+                                      }
+                                    />
+                                    {blockErrors[key] && (
+                                      <span className="field-error">
+                                        {blockErrors[key]}
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
                             </div>
                           </div>
                         );
-                      }
-                      return (
-                        <div
-                          className="field-block"
-                          key={spec.name + spec.indexSuffix}
-                        >
-                          <div className="field-label" title={spec.help}>
-                            <span>{spec.label}</span>
-                            <div className="label-meta">
-                              <code>{displayKeyName(spec)}</code>
-                              {spec.requiresVersion25 && (
-                                <span className="v25-badge">需 2.5+</span>
-                              )}
-                            </div>
-                          </div>
-                          <div className="slot-grid">
-                            {concrete.map((key, index) => {
-                              const present =
-                                Object.prototype.hasOwnProperty.call(
-                                  block.values,
-                                  key,
-                                );
-                              const value =
-                                drafts[activeKeys]?.[key] ??
-                                block.values[key] ??
-                                '';
-                              return (
-                                <div className="slot-cell" key={key}>
-                                  <span className="slot-index">
-                                    {spec.indexStart + index}
-                                    <MissingHint
-                                      present={present}
-                                      value={value}
-                                    />
-                                  </span>
-                                  <FieldControl
-                                    spec={spec}
-                                    keys={activeKeys}
-                                    value={value}
-                                    onChange={(next) =>
-                                      onFieldChange(activeKeys, key, next)
-                                    }
-                                  />
-                                  {blockErrors[key] && (
-                                    <span className="field-error">
-                                      {blockErrors[key]}
-                                    </span>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            );
-          })}
+                      })}
+                    </div>
+                  )}
+                </section>
+              );
+            })}
+        </div>
+        <div
+          className="preview-resizer"
+          role="separator"
+          aria-orientation="vertical"
+          title="拖动调整预览宽度（双击恢复默认）"
+          onMouseDown={startPreviewResize}
+          onDoubleClick={() => setPreviewWidth(null)}
+        />
+        <SkinPreview
+          skinPath={skinData.path}
+          skinName={skinName}
+          fonts={fonts}
+          keys={activeKeys}
+          values={effectiveValues}
+          version={skinData.version}
+          width={previewWidth}
+        />
       </div>
 
       {showRaw && (

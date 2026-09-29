@@ -2,11 +2,11 @@ $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $releaseDir = Join-Path $root 'release\ManiaSkinEditor'
-$zipPath = Join-Path $root 'release\ManiaSkinEditor-0.1.2-win64.zip'
-$currentExe = 'ManiaSkinEditor-0.1.2.exe'
+$zipPath = Join-Path $root 'release\ManiaSkinEditor-0.1.3-win64.zip'
+$currentExe = 'ManiaSkinEditor-0.1.3.exe'
 
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
-foreach ($cacheName in @('ManiaSkinEditor.exe.WebView2', 'ManiaSkinEditor-0.1.1.exe.WebView2', "$currentExe.WebView2")) {
+foreach ($cacheName in @('ManiaSkinEditor.exe.WebView2', 'ManiaSkinEditor-0.1.2.exe.WebView2', "$currentExe.WebView2")) {
   $webviewData = Join-Path $releaseDir $cacheName
   if (Test-Path -LiteralPath $webviewData) {
     Remove-Item -LiteralPath $webviewData -Recurse -Force
@@ -20,7 +20,7 @@ $legacyExe = Join-Path $releaseDir 'ManiaSkinEditor.exe'
 if (Test-Path -LiteralPath $legacyExe) {
   Remove-Item -LiteralPath $legacyExe -Force
 }
-$oldExe = Join-Path $releaseDir 'ManiaSkinEditor-0.1.1.exe'
+$oldExe = Join-Path $releaseDir 'ManiaSkinEditor-0.1.2.exe'
 if (Test-Path -LiteralPath $oldExe) {
   Remove-Item -LiteralPath $oldExe -Force
 }

@@ -4,12 +4,15 @@
 
 界面基于 React + TypeScript + Vite，后端为 C++20，桌面端使用 WebView2 承载，前端资源会直接嵌入单个可执行文件。
 
+当前版本为 `0.1.3`（皮肤预览渲染修正），历史版本见 Releases 页面。
+
 ## 功能
 
 - 绑定 osu! Skins 目录并扫描其中的皮肤文件夹。
 - 读取并编辑 `skin.ini` 中的 `[Mania]` 参数，按 `Keys`（1K-18K）区分配置。
 - 支持各键数样式配置，并将不同皮肤的样式合并保存到 Skins 根目录的 JSON 文件中。
 - 提供常用参数模块，如 `ColumnStart`、`ColumnWidth`、`BarlineHeight`、`HitPosition` 等。
+- 提供皮肤预览面板：按 osu! 以 480 高度为基准的坐标系渲染当前键数模块的轨道背景、音符、面条、判定线，以及分数/连击 HUD。
 - 提供面条身图像调整：
   - 图片留白与 alpha 识别
   - 顶部/左右留白与透明度修改

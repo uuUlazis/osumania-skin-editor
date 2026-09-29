@@ -1,0 +1,23 @@
+osu!mania 皮肤 skin.ini 编辑器
+
+版本：0.1.3
+快照时间：2026-09-15
+
+本目录为 0.1.3 完整项目快照，包含后端、前端、脚本与构建说明。
+测试皮肤位于外层根目录 test/Skins，release 交付物由构建脚本生成。
+
+本版更新（相对 0.1.2）：
+1. 新增皮肤预览面板，按 osu! 的 480 高度基准坐标系渲染轨道、音符、面条与判定线。
+2. 预览中 ColumnStart、ColumnWidth、ColumnSpacing、HitPosition、LightPosition、ScorePosition、
+   ComboPosition、NoteImage*、KeyImage*、StageHint 等 skin.ini 键值全部生效。
+3. 演示谱面改为共享行排列，同轨单键间距不小于 24 单位，跨轨错开，面条与单键不重叠。
+4. 相邻且颜色相同的轨道背景合并成一张矩形，消除轨道之间的 1px 竖缝。
+5. 音符与面条头/尾贴图左右各外扩 0.5（480 空间单位），消除相邻贴图共边处的抗锯齿竖线。
+6. 面条定位按 osu! wiki 重写：H/L/T 的 Origin 均为 Bottom，面身两端内缩到头/尾贴图的不透明
+   竖带中心；头/尾贴图整张透明时退回官方 Origin Bottom 位置。
+7. mania-stage-bottom.png 按官方行为渲染，不按轨道宽度拉伸，并绘制在音符之上覆盖整个舞台。
+8. skin.ini 中写成 _blank 的元素按 1x1 全透明贴图处理，不再回退成颜色色块。
+
+重新构建：执行 scripts\build.ps1（自动安装前端依赖、编译、测试并打包）。
+直接使用：构建后运行 release\ManiaSkinEditor\ManiaSkinEditor-0.1.3.exe，
+或解压 release\ManiaSkinEditor-0.1.3-win64.zip。

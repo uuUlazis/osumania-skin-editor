@@ -213,8 +213,10 @@ export default function App() {
       }
       setDrafts(initial);
       setDirtyKeys(new Set());
-      const first = data.blocks.find((block) => block.keys !== null)?.keys;
-      setActiveKeys(first ?? null);
+      const available = data.blocks
+        .map((block) => block.keys)
+        .filter((key): key is number => key !== null);
+      setActiveKeys(available.includes(4) ? 4 : (available[0] ?? null));
       const styleResult = await api.getStyles(skin.path);
       setStyles(styleResult.styles);
     } catch (error) {
