@@ -1,10 +1,10 @@
 # osu!mania 皮肤编辑器
 
-一个面向 osu!mania 的图形化皮肤编辑器，用于读取皮肤目录、按 `Keys` 管理 `[Mania]` 小节，并对 `skin.ini` 中与下落式玩法相关的参数进行编辑。
+一个面向 osu!mania 的图形化皮肤编辑器，用于读取皮肤目录、按 `Keys` 管理 `[Mania]` 小节，并对 `skin.ini` 中与mania模式相关的参数进行编辑。
 
 界面基于 React + TypeScript + Vite，后端为 C++20，桌面端使用 WebView2 承载，前端资源会直接嵌入单个可执行文件。
 
-当前版本为 `0.1.3`（皮肤预览渲染修正），历史版本见 Releases 页面。
+当前版本为 `0.1.3`，历史版本见 Releases 页面。
 
 ## 功能
 
@@ -20,12 +20,3 @@
   - 撤销与重做
 - 保存到当前图片，或通过系统窗口另存为
 - 支持皮肤目录克隆、重命名、删除到回收站及目录操作撤销/重做。
-
-## 技术栈
-
-- React 18 + TypeScript + Vite
-- C++20 + CMake + Ninja
-- cpp-httplib、nlohmann/json、stb
-- Windows WebView2
-
-Powered by Ulazis
