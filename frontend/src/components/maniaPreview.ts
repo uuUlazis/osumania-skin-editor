@@ -44,7 +44,10 @@ export interface PreviewColumn {
   leftLine: number;
   rightLine: number;
   isSpecial: boolean;
+  /** 默认贴图名的后缀：特殊列是 S，其余列按到舞台边缘的距离取 1/2。 */
   token: string;
+  /** 忽略特殊列时的后缀（1/2），仅用于特殊列贴图缺失时的兜底。 */
+  plainToken: string;
   background: Rgba;
   light: Rgba;
 }
@@ -225,8 +228,27 @@ export function buildLayout({ keys, value, centre, aspect }: LayoutOptions): Pre
     : numeric(rawStart, DEFAULT_COLUMN_START);
 
   const style = specialStyleNumber(value('SpecialStyle'));
+  /**
+   * 特殊列（默认贴图后缀 S）判定，按官方实现：
+   * - osu!/lazer `StageDefinition.IsSpecialColumn(column) => Columns % 2 == 1 && column == Columns / 2`，
+   *   由 `Stage.cs` 用**段内**索引逐段调用 ⇒ 段内列数为奇数时该段中央列是特殊列，偶数段没有特殊列。
+   *   于是 1K/3K/5K/7K/9K… 的中央列是 S（mania-noteS / mania-noteSH/L/T / mania-keyS /
+   *   mania-keySD），2K/4K/6K/8K/10K… 不是。
+   * - 偶数列只在 wiki/Skinning/skin.ini 的 SpecialStyle（1 = left (SP) / outer (DP) lane，
+   *   2 = right (SP) / inner (DP) lane，for even keycounts more than 4）里出现；lazer 的旧皮肤
+   *   渲染不参与这段判定，这里保留按 wiki 字面语义的兜底：1 = 段的最左列，2 = 段的最右列
+   *   （未分段时即整排最右列）。
+   */
   const isSpecial = (index: number): boolean => {
-    if (keys <= 4 || keys % 2 !== 0 || (style !== 1 && style !== 2)) {
+    const stage = ranges.find((item) => index >= item.from && index < item.to);
+    if (!stage) {
+      return false;
+    }
+    const stageCount = stage.to - stage.from;
+    if (stageCount % 2 === 1) {
+      return index - stage.from === (stageCount - 1) / 2;
+    }
+    if (keys <= 4 || (style !== 1 && style !== 2)) {
       return false;
     }
     if (style === 1) {
@@ -252,6 +274,7 @@ export function buildLayout({ keys, value, centre, aspect }: LayoutOptions): Pre
         rightLine: lineWidths[i + 1] * COLUMN_LINE_SCALE,
         isSpecial: special,
         token: fallbackToken(i - range.from, stageCount, special),
+        plainToken: fallbackToken(i - range.from, stageCount, false),
         background: parseColor(value(`Colour${i + 1}`), OPAQUE_BLACK),
         light: parseColor(value(`ColourLight${i + 1}`), DEFAULT_LIGHT),
       };

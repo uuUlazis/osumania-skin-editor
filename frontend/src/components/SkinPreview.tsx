@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Eye, EyeOff, Layers } from 'lucide-react';
+import { Layers } from 'lucide-react';
 import { api } from '../api/client';
 import {
   DEFAULT_ASPECT,
@@ -244,14 +244,13 @@ export function SkinPreview({ skinPath, skinName, fonts, keys, values, version, 
   const [imageIndex, setImageIndex] = useState<ImageIndex>(() => new Map());
   const [imagesLoaded, setImagesLoaded] = useState(false);
   const [sizeTick, setSizeTick] = useState(0);
-  const [showKeys, setShowKeys] = useState(true);
-  const [showLights, setShowLights] = useState(true);
-  const [centreMode, setCentreMode] = useState<CentreMode>('auto');
   const [backdrop, setBackdrop] = useState<Backdrop>('white');
   const [aspectId, setAspectId] = useState('16:10');
-  const [viewMode, setViewMode] = useState<'compact' | 'screen'>('screen');
-  // stable 的准确率在右上角（分数下方），不是轨道顶部居中
-  const [accPlacement, setAccPlacement] = useState<AccPlacement>('top-right');
+  // 下面三项原先由工具栏下拉框调节，现已固定（对应控件已从界面移除）：
+  // 灯光与判定线始终显示；水平位置按自动判断；acc 固定右上角（stable 中在分数下方）。
+  const showLights = true;
+  const centreMode: CentreMode = 'auto';
+  const accPlacement: AccPlacement = 'top-right';
   const [useAt2x, setUseAt2x] = useState(true);
 
   useEffect(() => {
@@ -302,35 +301,46 @@ export function SkinPreview({ skinPath, skinName, fonts, keys, values, version, 
     }
     return layout.columns.map((column) => {
       const token = column.token;
+      const plain = column.plainToken;
       const suffix = String(column.index);
       return {
         note: firstUrl(imageIndex, skinPath, [
           values[`NoteImage${suffix}`],
           `mania-note${token}`,
+          `mania-note${plain}`,
         ]),
         // 一律先读 skin.ini 显式值，缺省才用 wiki 规定的默认文件名；
         // 不做 wiki 未规定的跨元素回退（wiki 只写了「T 缺省时转而使用音符头元素」）。
+        // 特殊列（mania-noteS 等）多一层同元素的普通列兜底：皮肤没做 S 贴图时
+        // 官方会退回默认皮肤的同名贴图，本预览没有内置默认皮肤，退回该列的普通贴图
+        // 总好过整列空白。
         head: firstUrl(imageIndex, skinPath, [
           values[`NoteImage${suffix}H`],
           `mania-note${token}H`,
+          `mania-note${plain}H`,
         ]),
         body: firstUrl(imageIndex, skinPath, [
           values[`NoteImage${suffix}L`],
           `mania-note${token}L`,
+          `mania-note${plain}L`,
         ]),
         tail: firstUrl(imageIndex, skinPath, [
           values[`NoteImage${suffix}T`],
           `mania-note${token}T`,
+          `mania-note${plain}T`,
           values[`NoteImage${suffix}H`],
           `mania-note${token}H`,
+          `mania-note${plain}H`,
         ]),
         key: firstUrl(imageIndex, skinPath, [
           values[`KeyImage${suffix}`],
           `mania-key${token}`,
+          `mania-key${plain}`,
         ]),
         keyDown: firstUrl(imageIndex, skinPath, [
           values[`KeyImage${suffix}D`],
           `mania-key${token}D`,
+          `mania-key${plain}D`,
         ]),
       };
     });
@@ -691,14 +701,9 @@ export function SkinPreview({ skinPath, skinName, fonts, keys, values, version, 
   const leftWidth = leftSize ? units(leftSize.w) : 0;
   const rightWidth = rightSize ? units(rightSize.w) : 0;
 
-  // 紧凑视野：把画面裁到舞台（含左右边框贴图）范围，让预览尽可能大。
-  const compact = viewMode === 'compact';
-  const decorLeft = stageSprites.left && leftSize ? units(leftSize.w) : 0;
-  const decorRight = stageSprites.right && rightSize ? units(rightSize.w) : 0;
-  const viewX = compact ? Math.min(0, layout.stageLeft - decorLeft - 8) : 0;
-  const viewWidth = compact
-    ? Math.max(40, layout.stageRight + decorRight + 8 - viewX)
-    : layout.width;
+  // 视野固定「整屏」：画面始终取完整的 768x480 空间（原先的「贴合舞台」紧凑视野已移除）。
+  const viewX = 0;
+  const viewWidth = layout.width;
   const backdropFill =
     backdrop === 'checker' ? 'url(#pv-checker)' : backdrop === 'dark' ? '#101317' : '#ffffff';
   const backdropDim = backdrop === 'white' ? 0.72 : 0;
@@ -905,43 +910,9 @@ export function SkinPreview({ skinPath, skinName, fonts, keys, values, version, 
       </div>
 
       <div className="preview-toolbar">
-        <button
-          type="button"
-          className={showKeys ? 'active' : ''}
-          onClick={() => setShowKeys((current) => !current)}
-          title="显示/隐藏挡板按键"
-        >
-          {showKeys ? <Eye size={13} /> : <EyeOff size={13} />}
-          挡板
-        </button>
-
-        <button
-          type="button"
-          className={showLights ? 'active' : ''}
-          onClick={() => setShowLights((current) => !current)}
-          title="显示/隐藏列灯光与判定线"
-        >
-          {showLights ? <Eye size={13} /> : <EyeOff size={13} />}
-          灯光
-        </button>
-        <label className="preview-field">
-          视野
-          <select value={viewMode} onChange={(event) => setViewMode(event.target.value as 'compact' | 'screen')}>
-            <option value="compact">贴合舞台</option>
-            <option value="screen">整屏</option>
-          </select>
-        </label>
-        <label className="preview-field">
-          水平
-          <select value={centreMode} onChange={(event) => setCentreMode(event.target.value as CentreMode)}>
-            <option value="auto">自动</option>
-            <option value="on">居中</option>
-            <option value="off">按 ColumnStart</option>
-          </select>
-        </label>
         <label className="preview-field">
           比例
-          <select value={aspectId} disabled={compact} onChange={(event) => setAspectId(event.target.value)}>
+          <select value={aspectId} onChange={(event) => setAspectId(event.target.value)}>
             {ASPECTS.map((item) => (
               <option key={item.id} value={item.id}>
                 {item.label}
@@ -958,13 +929,6 @@ export function SkinPreview({ skinPath, skinName, fonts, keys, values, version, 
         >
           @2x
         </button>
-        <label className="preview-field">
-          acc
-          <select value={accPlacement} onChange={(event) => setAccPlacement(event.target.value as AccPlacement)}>
-            <option value="top-centre">顶部居中</option>
-            <option value="top-right">右上角</option>
-          </select>
-        </label>
         <label className="preview-field">
           谱面bg
           <select value={backdrop} onChange={(event) => setBackdrop(event.target.value as Backdrop)}>
@@ -1154,19 +1118,17 @@ export function SkinPreview({ skinPath, skinName, fonts, keys, values, version, 
             {renderNotes()}
             {!keysUnderNotes && renderKeys()}
 
-            {!compact && (
-              <SkinHud
-                width={layout.width}
-                height={layout.height}
-                stageLeft={layout.stageLeft}
-                stageRight={layout.stageRight}
-                comboPosition={layout.comboPosition}
-                scorePosition={layout.scorePosition}
-                sprites={hudSprites}
-                sizeOf={sizeOf}
-                accPlacement={accPlacement}
-              />
-            )}
+            <SkinHud
+              width={layout.width}
+              height={layout.height}
+              stageLeft={layout.stageLeft}
+              stageRight={layout.stageRight}
+              comboPosition={layout.comboPosition}
+              scorePosition={layout.scorePosition}
+              sprites={hudSprites}
+              sizeOf={sizeOf}
+              accPlacement={accPlacement}
+            />
 
             {stageSprites.bottom && bottomSize && (
               // wiki（Skinning/osu!mania）mania-stage-bottom：
@@ -1186,23 +1148,6 @@ export function SkinPreview({ skinPath, skinName, fonts, keys, values, version, 
             )}
           </g>
         </svg>
-      </div>
-
-      <div className="preview-legend">
-        <div>
-          水平：{layout.centred ? '自动居中' : `ColumnStart ${Math.round(layout.stageLeft)}`}
-          ，判定线 {Math.round(layout.hitPosition)}/480，note 高度基准 {Math.round(layout.noteHeightScale)}
-        </div>
-        <div>
-          贴图：note/面条/挡板 {model.resolved}/{model.total} 张
-          {Object.values(stageSprites).filter((url) => url !== null).length > 0
-            ? `，舞台 ${Object.values(stageSprites).filter((url) => url !== null).length} 张`
-            : ''}
-        </div>
-        <div className="preview-tip">
-          按 osu! 以 480 高度为基准的坐标换算；未在 skin.ini 指定的贴图会用 osu! 默认名
-          （mania-note1/2/S、mania-key1/2/S、mania-stage-* 等）在皮肤目录中查找，找不到时以颜色示意。
-        </div>
       </div>
     </aside>
   );

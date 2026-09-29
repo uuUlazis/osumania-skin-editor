@@ -1633,6 +1633,8 @@ code {
   border-radius: 8px;
   background: #0d1013;
   overflow: hidden;
+  /* 预览面板高于舞台时，把整块舞台在面板里垂直居中（面板过矮时自动退回顶部并可滚动） */
+  margin-block: auto;
 }
 
 .preview-stage {
