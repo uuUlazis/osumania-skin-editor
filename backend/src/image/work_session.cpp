@@ -217,6 +217,43 @@ bool WorkSession::transform(const std::string& workId,
                                                  error);
 }
 
+bool WorkSession::drawLine(const std::string& workId,
+                           const PngLineOptions& options, PngMetrics& metrics,
+                           std::string& error) {
+  std::lock_guard lock(work_session_detail::gMutex);
+  auto it = work_session_detail::gSessions.find(workId);
+  if (it == work_session_detail::gSessions.end()) {
+    error = "工作会话不存在";
+    return false;
+  }
+  auto& record = it->second;
+  auto undoFile = work_session_detail::undoPath(record, record.undoCount);
+  if (!work_session_detail::copyFile(record.workFile, undoFile)) {
+    error = "写入撤销快照失败";
+    return false;
+  }
+  if (!PngTool::drawLine(record.workFile, record.workFile, options, metrics,
+                         error)) {
+    return false;
+  }
+  record.undoCount++;
+  work_session_detail::clearRedoFilesLocked(record);
+  record.redoCount = 0;
+  return true;
+}
+
+bool WorkSession::contentProfile(const std::string& workId,
+                                 PngContentProfile& profile,
+                                 std::string& error) {
+  std::lock_guard lock(work_session_detail::gMutex);
+  auto it = work_session_detail::gSessions.find(workId);
+  if (it == work_session_detail::gSessions.end()) {
+    error = "工作会话不存在";
+    return false;
+  }
+  return PngTool::contentProfile(it->second.workFile, profile, error);
+}
+
 bool WorkSession::undo(const std::string& workId, PngMetrics& metrics,
                        std::string& error) {
   std::lock_guard lock(work_session_detail::gMutex);

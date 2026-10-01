@@ -14,7 +14,7 @@ import {
   Undo2,
 } from 'lucide-react';
 import { api } from '../api/client';
-import type { PngMetrics } from '../api/client';
+import type { LocalProfile, PngMetrics } from '../api/client';
 
 interface NoodleToolProps {
   skinPath: string;
@@ -24,6 +24,7 @@ interface NoodleToolProps {
 
 type BackgroundMode = 'checker' | 'black' | 'white' | 'green';
 type PreviewMode = 'original' | 'modified';
+type GuideSide = 'top' | 'bottom' | 'left' | 'right';
 
 interface SourceImage {
   image: HTMLImageElement;
@@ -94,6 +95,18 @@ export function NoodleTool({ skinPath, onClose, notify }: NoodleToolProps) {
   const [workRevision, setWorkRevision] = useState(0);
   const [canUndoLocal, setCanUndoLocal] = useState(false);
   const [canRedoLocal, setCanRedoLocal] = useState(false);
+  const [borderWidth, setBorderWidth] = useState('4');
+  const [borderR, setBorderR] = useState('255');
+  const [borderG, setBorderG] = useState('255');
+  const [borderB, setBorderB] = useState('255');
+  const [borderA, setBorderA] = useState('255');
+  const [guideSide, setGuideSide] = useState<GuideSide>('left');
+  const [guidePos, setGuidePos] = useState<number | null>(null);
+  const [guideSnapLabel, setGuideSnapLabel] = useState<string | null>(null);
+  const [guideBusy, setGuideBusy] = useState(false);
+  const [guideDragging, setGuideDragging] = useState(false);
+  const profileRef = useRef<{ key: string; value: LocalProfile } | null>(null);
+  const guideDragRef = useRef(false);
   const [selection, setSelection] = useState<Rect | null>(null);
   const [transformBase, setTransformBase] = useState<Rect | null>(null);
   const dragRef = useRef<DragState | null>(null);
@@ -131,6 +144,62 @@ export function NoodleTool({ skinPath, onClose, notify }: NoodleToolProps) {
     viewer.addEventListener('wheel', onWheel, { passive: false });
     return () => viewer.removeEventListener('wheel', onWheel);
   }, []);
+
+  // 预览线激活时的键盘操作：Enter 渲染、Esc 取消、方向键微调（Shift 为 10px）。
+  useEffect(() => {
+    if (guidePos === null) {
+      return;
+    }
+    const onKeyDown = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      const inField =
+        target?.tagName === 'INPUT' ||
+        target?.tagName === 'SELECT' ||
+        target?.tagName === 'TEXTAREA';
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        void renderGuide();
+        return;
+      }
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        cancelGuide();
+        return;
+      }
+      if (inField) {
+        return;
+      }
+      const step = event.shiftKey ? 10 : 1;
+      if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+        if (guideSide !== 'left' && guideSide !== 'right') {
+          return;
+        }
+        event.preventDefault();
+        setGuideFromRaw(guidePos + (event.key === 'ArrowRight' ? step : -step), false);
+        return;
+      }
+      if (event.key === 'ArrowUp' || event.key === 'ArrowDown') {
+        if (guideSide !== 'top' && guideSide !== 'bottom') {
+          return;
+        }
+        event.preventDefault();
+        setGuideFromRaw(guidePos + (event.key === 'ArrowDown' ? step : -step), false);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    guidePos,
+    guideSide,
+    zoom,
+    borderWidth,
+    borderA,
+    source,
+    workId,
+    workRevision,
+    name,
+    metrics,
+  ]);
 
   useEffect(() => {
     if (previewMode !== 'modified' || !name || !metrics) {
@@ -385,6 +454,309 @@ export function NoodleTool({ skinPath, onClose, notify }: NoodleToolProps) {
     }
   }
 
+  function byteValue(value: string): number {
+    const parsed = Number(value);
+    if (!Number.isFinite(parsed)) {
+      return 0;
+    }
+    return Math.max(0, Math.min(255, Math.round(parsed)));
+  }
+
+  function borderColorHex(): string {
+    return `#${[borderR, borderG, borderB]
+      .map((channel) => byteValue(channel).toString(16).padStart(2, '0'))
+      .join('')}`;
+  }
+
+  function applyBorderColor(hex: string) {
+    const normalized = hex.replace('#', '');
+    if (normalized.length !== 6) {
+      return;
+    }
+    setBorderR(String(parseInt(normalized.slice(0, 2), 16)));
+    setBorderG(String(parseInt(normalized.slice(2, 4), 16)));
+    setBorderB(String(parseInt(normalized.slice(4, 6), 16)));
+  }
+
+  function guideAxisSize(): number {
+    if (!source) {
+      return 0;
+    }
+    return guideSide === 'left' || guideSide === 'right'
+      ? source.width
+      : source.height;
+  }
+
+  function guideSideLabel(side: GuideSide): string {
+    if (side === 'top') return '上';
+    if (side === 'bottom') return '下';
+    if (side === 'left') return '左';
+    return '右';
+  }
+
+  async function ensureProfile(id: string): Promise<LocalProfile | null> {
+    const key = id + '|' + workRevision;
+    if (profileRef.current?.key === key) {
+      return profileRef.current.value;
+    }
+    try {
+      const value = await api.localProfile(id);
+      profileRef.current = { key, value };
+      return value;
+    } catch (error) {
+      notify('error', errorText(error));
+      return null;
+    }
+  }
+
+  function defaultGuidePosition(
+    profile: LocalProfile,
+    side: GuideSide,
+  ): { position: number; label: string } {
+    if (profile.hasContent) {
+      const value =
+        side === 'left'
+          ? profile.content.minX
+          : side === 'right'
+            ? profile.content.maxX
+            : side === 'top'
+              ? profile.content.minY
+              : profile.content.maxY;
+      return { position: value, label: '面身最外缘' };
+    }
+    const size =
+      side === 'left' || side === 'right' ? profile.width : profile.height;
+    return {
+      position: side === 'bottom' || side === 'right' ? Math.max(0, size - 1) : 0,
+      label: '画布外缘',
+    };
+  }
+
+  // 吸附候选：画布外缘 + 面身轮廓（后端算好的逐行/逐列边缘）。
+  // 边界数组是升序的，用二分找最近的几个候选值。
+  function nearestGuideSnap(raw: number): { position: number; label: string; distance: number } {
+    const profile = profileRef.current?.value ?? null;
+    const size = guideAxisSize();
+    let best = { position: raw, label: '', distance: Number.POSITIVE_INFINITY };
+    const consider = (value: number, label: string) => {
+      if (!Number.isFinite(value) || value < 0) return;
+      if (size > 0 && value > size - 1) return;
+      const distance = Math.abs(value - raw);
+      if (distance < best.distance) {
+        best = { position: value, label, distance };
+      }
+    };
+    consider(0, '画布外缘');
+    consider(Math.max(0, size - 1), '画布外缘');
+    if (profile && profile.hasContent && size > 0) {
+      const bbox =
+        guideSide === 'left'
+          ? profile.content.minX
+          : guideSide === 'right'
+            ? profile.content.maxX
+            : guideSide === 'top'
+              ? profile.content.minY
+              : profile.content.maxY;
+      const bboxLabel = '面身最外缘';
+      consider(bbox, bboxLabel);
+      const edges = profile.edges[guideSide] ?? [];
+      let low = 0;
+      let high = edges.length - 1;
+      while (low <= high) {
+        const mid = (low + high) >> 1;
+        const value = edges[mid];
+        consider(value, value === bbox ? bboxLabel : '面身轮廓');
+        if (value === raw) break;
+        if (value < raw) {
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
+      }
+      if (low < edges.length) {
+        consider(edges[low], edges[low] === bbox ? bboxLabel : '面身轮廓');
+      }
+      if (high >= 0) {
+        consider(edges[high], edges[high] === bbox ? bboxLabel : '面身轮廓');
+      }
+    }
+    return best;
+  }
+
+  function setGuideFromRaw(raw: number, snapEnabled: boolean) {
+    const size = guideAxisSize();
+    if (size <= 0) {
+      return;
+    }
+    const clamped = Math.max(0, Math.min(size - 1, Math.round(raw)));
+    const tolerance = Math.max(1, Math.round(6 / Math.max(0.05, zoom)));
+    const nearest = snapEnabled
+      ? nearestGuideSnap(clamped)
+      : { position: clamped, label: '', distance: Number.POSITIVE_INFINITY };
+    const snapped = nearest.distance <= tolerance;
+    setGuidePos(snapped ? nearest.position : clamped);
+    setGuideSnapLabel(snapped ? nearest.label || null : null);
+  }
+
+  function scrollGuideIntoView(side: GuideSide, position: number) {
+    const viewer = viewerRef.current;
+    if (!viewer) {
+      return;
+    }
+    const screen = position * zoom;
+    if (side === 'left' || side === 'right') {
+      viewer.scrollLeft = Math.max(0, screen - viewer.clientWidth / 2);
+    } else {
+      viewer.scrollTop = Math.max(0, screen - viewer.clientHeight / 2);
+    }
+  }
+
+  async function startGuide(side: GuideSide) {
+    if (!name || !metrics) {
+      return;
+    }
+    setGuideSide(side);
+    const id = await ensureSession();
+    if (!id) {
+      return;
+    }
+    const profile = await ensureProfile(id);
+    const size =
+      side === 'left' || side === 'right'
+        ? (source?.width ?? 1)
+        : (source?.height ?? 1);
+    const target = profile
+      ? defaultGuidePosition(profile, side)
+      : {
+          position:
+            side === 'bottom' || side === 'right' ? Math.max(0, size - 1) : 0,
+          label: '画布外缘',
+        };
+    if (!profile) {
+      notify('warn', '未能读取面身轮廓，预览线放在画布外缘');
+    }
+    setPreviewMode('original');
+    setSelection(null);
+    setTransformBase(null);
+    setLocalTool(null);
+    setGuidePos(target.position);
+    setGuideSnapLabel(target.label);
+    setGuideDragging(false);
+    guideDragRef.current = false;
+    window.requestAnimationFrame(() =>
+      scrollGuideIntoView(side, target.position),
+    );
+  }
+
+  function cancelGuide() {
+    guideDragRef.current = false;
+    setGuideDragging(false);
+    setGuidePos(null);
+    setGuideSnapLabel(null);
+  }
+
+  function moveGuideFromEvent(
+    event: ReactPointerEvent,
+    snapEnabled: boolean,
+  ) {
+    if (!source) {
+      return;
+    }
+    const point = imagePointFromEvent(event);
+    setGuideFromRaw(
+      guideSide === 'left' || guideSide === 'right' ? point.x : point.y,
+      snapEnabled,
+    );
+  }
+
+  async function renderGuide() {
+    if (guidePos === null || !name || !metrics) {
+      return;
+    }
+    const id = await ensureSession();
+    if (!id) {
+      return;
+    }
+    setGuideBusy(true);
+    try {
+      const result = await api.drawBorderLineLocal(id, {
+        side: guideSide,
+        position: Math.max(0, Math.round(guidePos)),
+        width: guideThickness(),
+        r: byteValue(borderR),
+        g: byteValue(borderG),
+        b: byteValue(borderB),
+        a: byteValue(borderA),
+      });
+      acceptMetrics(result.metrics);
+      setCanUndoLocal(result.canUndo);
+      setCanRedoLocal(result.canRedo);
+      await reloadWorking(id);
+      const label = guideSideLabel(guideSide);
+      cancelGuide();
+      notify('ok', label + '边线已渲染，可在下方撤销');
+    } catch (error) {
+      notify('error', errorText(error));
+    } finally {
+      setGuideBusy(false);
+    }
+  }
+
+  function guideThickness(): number {
+    return Math.max(1, Math.round(Number(borderWidth) || 1));
+  }
+
+  function guideStyle(): CSSProperties {
+    if (guidePos === null) {
+      return {};
+    }
+    const size = Math.max(1, guideThickness() * zoom);
+    const alpha = Math.max(0.35, byteValue(borderA) / 255);
+    const color =
+      'rgba(' +
+      byteValue(borderR) +
+      ', ' +
+      byteValue(borderG) +
+      ', ' +
+      byteValue(borderB) +
+      ', ' +
+      alpha +
+      ')';
+    if (guideSide === 'left') {
+      return {
+        left: guidePos * zoom,
+        top: 0,
+        width: size,
+        height: '100%',
+        background: color,
+      };
+    }
+    if (guideSide === 'right') {
+      return {
+        left: (guidePos + 1) * zoom - size,
+        top: 0,
+        width: size,
+        height: '100%',
+        background: color,
+      };
+    }
+    if (guideSide === 'top') {
+      return {
+        top: guidePos * zoom,
+        left: 0,
+        height: size,
+        width: '100%',
+        background: color,
+      };
+    }
+    return {
+      top: (guidePos + 1) * zoom - size,
+      left: 0,
+      height: size,
+      width: '100%',
+      background: color,
+    };
+  }
   async function localHistory(isUndo: boolean) {
     if (!workId) {
       notify('warn', '请先选择并变换区域');
@@ -407,7 +779,29 @@ export function NoodleTool({ skinPath, onClose, notify }: NoodleToolProps) {
   }
 
   function handleFramePointerDown(event: ReactPointerEvent<HTMLDivElement>) {
-    if (!source || !localTool) {
+    if (!source) {
+      return;
+    }
+    if (guidePos !== null) {
+      const frame = frameRef.current;
+      if (frame) {
+        const bounds = frame.getBoundingClientRect();
+        const inside =
+          event.clientX >= bounds.left - 2 &&
+          event.clientX <= bounds.right + 2 &&
+          event.clientY >= bounds.top - 2 &&
+          event.clientY <= bounds.bottom + 2;
+        if (inside) {
+          event.preventDefault();
+          guideDragRef.current = true;
+          setGuideDragging(true);
+          event.currentTarget.setPointerCapture(event.pointerId);
+          moveGuideFromEvent(event, !event.altKey);
+          return;
+        }
+      }
+    }
+    if (!localTool) {
       return;
     }
     event.preventDefault();
@@ -463,6 +857,11 @@ export function NoodleTool({ skinPath, onClose, notify }: NoodleToolProps) {
   }
 
   function handleFramePointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (guideDragRef.current) {
+      event.preventDefault();
+      moveGuideFromEvent(event, !event.altKey);
+      return;
+    }
     const drag = dragRef.current;
     if (!drag || !source) {
       return;
@@ -522,6 +921,8 @@ export function NoodleTool({ skinPath, onClose, notify }: NoodleToolProps) {
   }
 
   function handleFramePointerUp() {
+    guideDragRef.current = false;
+    setGuideDragging(false);
     const drag = dragRef.current;
     dragRef.current = null;
     if (!drag || !source) {
@@ -868,6 +1269,131 @@ export function NoodleTool({ skinPath, onClose, notify }: NoodleToolProps) {
                 </div>
               </>
             )}
+
+            {metrics && (
+              <div className="noodle-border-panel">
+                <div className="noodle-border-head">
+                  边线绘制
+                  <span>可撤销 / 重做</span>
+                </div>
+
+                <div className="border-section">
+                  <div className="border-section-head">
+                    贴合面身（单边）
+                    <span>先填线宽与颜色，再生成预览线拖动吸附，按 Enter 渲染</span>
+                  </div>
+                <div className="noodle-fields">
+                  <div className="noodle-field">
+                    <label>线宽 px</label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={borderWidth}
+                      onChange={(event) => setBorderWidth(event.target.value)}
+                    />
+                  </div>
+                  <div className="noodle-field">
+                    <label>颜色</label>
+                    <input
+                      type="color"
+                      value={borderColorHex()}
+                      onChange={(event) => applyBorderColor(event.target.value)}
+                    />
+                  </div>
+                  {(
+                    [
+                      ['R', borderR, setBorderR],
+                      ['G', borderG, setBorderG],
+                      ['B', borderB, setBorderB],
+                      ['A', borderA, setBorderA],
+                    ] as Array<[string, string, (value: string) => void]>
+                  ).map(([label, value, setter]) => (
+                    <div className="noodle-field" key={label}>
+                      <label>{label}</label>
+                      <input
+                        type="number"
+                        min={0}
+                        max={255}
+                        value={value}
+                        onChange={(event) => setter(event.target.value)}
+                      />
+                    </div>
+                  ))}
+                </div>
+                  <div className="border-sides">
+                    {(['top', 'bottom', 'left', 'right'] as GuideSide[]).map(
+                      (side) => (
+                        <button
+                          key={side}
+                          type="button"
+                          className={
+                            'border-side-btn ' +
+                            (guidePos !== null && guideSide === side
+                              ? 'active'
+                              : '')
+                          }
+                          disabled={busy || guideBusy}
+                          onClick={() => void startGuide(side)}
+                        >
+                          {side === 'top'
+                            ? '上'
+                            : side === 'bottom'
+                              ? '下'
+                              : side === 'left'
+                                ? '左'
+                                : '右'}
+                        </button>
+                      ),
+                    )}
+                    <span className="guide-status">
+                      位置{' '}
+                      {guidePos === null
+                        ? '未生成'
+                        : (guideSide === 'left' || guideSide === 'right'
+                              ? 'x'
+                              : 'y') +
+                          ' = ' +
+                          Math.round(guidePos) +
+                          ' px'}
+                      {guidePos !== null && (
+                        <span
+                          className={
+                            'guide-snap ' + (guideSnapLabel ? 'on' : '')
+                          }
+                        >
+                          {guideSnapLabel ?? '自由位置'}
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  <div className="noodle-save-row">
+                    <button
+                      type="button"
+                      className="primary"
+                      disabled={busy || guideBusy || guidePos === null}
+                      onClick={() => void renderGuide()}
+                    >
+                      <Frame size={15} />
+                      渲染这条线
+                    </button>
+                    <button
+                      type="button"
+                      className="ghost"
+                      disabled={guideBusy || guidePos === null}
+                      onClick={cancelGuide}
+                    >
+                      <Undo2 size={14} />
+                      取消预览
+                    </button>
+                    <span className="picker-hint">
+                      {guidePos === null
+                        ? '点击上/下/左/右生成预览线，拖动到面身轮廓上再按 Enter 渲染'
+                        : 'Enter 渲染 / Esc 取消 / Alt 拖动暂时关闭吸附'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="noodle-preview-panel">
@@ -988,6 +1514,14 @@ export function NoodleTool({ skinPath, onClose, notify }: NoodleToolProps) {
                           </>
                         )}
                       </div>
+                    )}
+                    {guidePos !== null && (
+                      <div
+                        className={
+                          'preview-guide ' + (guideDragging ? 'dragging' : '')
+                        }
+                        style={guideStyle()}
+                      />
                     )}
                   </div>
                 ) : modifiedUrl ? (

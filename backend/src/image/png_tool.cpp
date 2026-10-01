@@ -311,4 +311,157 @@ bool PngTool::edit(const std::filesystem::path& source,
   return analyze(target, metrics, error);
 }
 
+bool PngTool::drawLine(const std::filesystem::path& source,
+                       const std::filesystem::path& target,
+                       const PngLineOptions& options, PngMetrics& metrics,
+                       std::string& error) {
+  if (!isPngName(source) || !isPngName(target)) {
+    error = "仅支持 PNG 图片";
+    return false;
+  }
+  if (options.width < 1) {
+    error = "线宽必须大于 0";
+    return false;
+  }
+  if (options.side < 0 || options.side > 3) {
+    error = "边线方向无效";
+    return false;
+  }
+  if (options.position < 0) {
+    error = "边线位置无效";
+    return false;
+  }
+  std::vector<unsigned char> rgba;
+  int width = 0;
+  int height = 0;
+  if (!decode(source, rgba, width, height, error)) {
+    return false;
+  }
+  if (width <= 0 || height <= 0) {
+    error = "图片尺寸无效";
+    return false;
+  }
+  const bool vertical = options.side == 2 || options.side == 3;
+  const int limit = vertical ? width : height;
+  if (options.position >= limit) {
+    error = "边线位置超出图片范围";
+    return false;
+  }
+
+  const unsigned char color[4] = {
+      static_cast<unsigned char>(std::clamp(options.r, 0, 255)),
+      static_cast<unsigned char>(std::clamp(options.g, 0, 255)),
+      static_cast<unsigned char>(std::clamp(options.b, 0, 255)),
+      static_cast<unsigned char>(std::clamp(options.a, 0, 255))};
+  auto paint = [&](int x, int y) {
+    unsigned char* pixel =
+        rgba.data() + (static_cast<size_t>(y) * width + x) * 4;
+    pixel[0] = color[0];
+    pixel[1] = color[1];
+    pixel[2] = color[2];
+    pixel[3] = color[3];
+  };
+
+  const int thickness = std::min(options.width, limit);
+  // 上/左：从 position 向画布内侧（右/下）延伸；下/右：从 position 向内（左/上）
+  // 延伸 —— position 始终是这条线最外侧的那一像素。
+  const bool outwardFirst = options.side == 0 || options.side == 2;
+  int from = outwardFirst ? options.position : options.position - thickness + 1;
+  int to = outwardFirst ? options.position + thickness - 1 : options.position;
+  from = std::max(0, from);
+  to = std::min(limit - 1, to);
+  for (int index = from; index <= to; ++index) {
+    if (vertical) {
+      for (int y = 0; y < height; ++y) {
+        paint(index, y);
+      }
+    } else {
+      for (int x = 0; x < width; ++x) {
+        paint(x, index);
+      }
+    }
+  }
+
+  if (!encode(target, width, height, rgba, error)) {
+    return false;
+  }
+  return analyze(target, metrics, error);
+}
+
+bool PngTool::contentProfile(const std::filesystem::path& path,
+                             PngContentProfile& profile, std::string& error) {
+  if (!isPngName(path)) {
+    error = "仅支持 PNG 图片";
+    return false;
+  }
+  std::vector<unsigned char> rgba;
+  int width = 0;
+  int height = 0;
+  if (!decode(path, rgba, width, height, error)) {
+    return false;
+  }
+  if (width <= 0 || height <= 0) {
+    error = "图片尺寸无效";
+    return false;
+  }
+  profile = PngContentProfile{};
+  profile.valid = true;
+  profile.width = width;
+  profile.height = height;
+
+  std::vector<int> rowMin(static_cast<size_t>(height), width);
+  std::vector<int> rowMax(static_cast<size_t>(height), -1);
+  std::vector<int> columnMin(static_cast<size_t>(width), height);
+  std::vector<int> columnMax(static_cast<size_t>(width), -1);
+  int minX = width;
+  int maxX = -1;
+  int minY = height;
+  int maxY = -1;
+  for (int y = 0; y < height; ++y) {
+    const unsigned char* row =
+        rgba.data() + static_cast<size_t>(y) * width * 4;
+    for (int x = 0; x < width; ++x) {
+      if (row[static_cast<size_t>(x) * 4 + 3] == 0) {
+        continue;
+      }
+      if (x < rowMin[static_cast<size_t>(y)]) rowMin[static_cast<size_t>(y)] = x;
+      if (x > rowMax[static_cast<size_t>(y)]) rowMax[static_cast<size_t>(y)] = x;
+      if (y < columnMin[static_cast<size_t>(x)])
+        columnMin[static_cast<size_t>(x)] = y;
+      if (y > columnMax[static_cast<size_t>(x)])
+        columnMax[static_cast<size_t>(x)] = y;
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+  }
+  profile.hasContent = maxX >= 0;
+  if (!profile.hasContent) {
+    return true;
+  }
+  profile.minX = minX;
+  profile.maxX = maxX;
+  profile.minY = minY;
+  profile.maxY = maxY;
+
+  auto collect = [](std::vector<int> values, int empty,
+                    std::vector<int>& out) {
+    constexpr size_t kMaxEdges = 65536;
+    values.erase(std::remove(values.begin(), values.end(), empty),
+                 values.end());
+    std::sort(values.begin(), values.end());
+    values.erase(std::unique(values.begin(), values.end()), values.end());
+    if (values.size() > kMaxEdges) {
+      values.resize(kMaxEdges);
+    }
+    out = std::move(values);
+  };
+  collect(rowMin, width, profile.leftEdges);
+  collect(rowMax, -1, profile.rightEdges);
+  collect(columnMin, height, profile.topEdges);
+  collect(columnMax, -1, profile.bottomEdges);
+  return true;
+}
+
 }  // namespace mania

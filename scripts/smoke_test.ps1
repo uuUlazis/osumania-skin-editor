@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$releaseExe = Join-Path $root 'release\ManiaSkinEditor\ManiaSkinEditor-0.1.3.exe'
+$releaseExe = Join-Path $root 'release\ManiaSkinEditor\ManiaSkinEditor-0.1.4.exe'
 $portFile = Join-Path $env:TEMP 'mania_smoke_port.txt'
 
 Remove-Item -LiteralPath $portFile -ErrorAction SilentlyContinue
@@ -47,7 +47,7 @@ try {
   Remove-Item -LiteralPath $portFile -ErrorAction SilentlyContinue
 }
 
-$zipList = tar.exe -tf (Join-Path $root 'release\ManiaSkinEditor-0.1.3-win64.zip')
+$zipList = tar.exe -tf (Join-Path $root 'release\ManiaSkinEditor-0.1.4-win64.zip')
 $zipHasCache = $zipList -match '\.exe\.WebView2'
 $zipHasLoader = $zipList -match 'WebView2Loader\.dll'
 $zipCount = ($zipList | Measure-Object).Count

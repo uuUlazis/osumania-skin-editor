@@ -1247,6 +1247,42 @@ code {
   min-width: 150px;
 }
 
+.noodle-border-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.noodle-border-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.noodle-border-head span {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.noodle-field input[type='color'] {
+  height: 30px;
+  padding: 2px 4px;
+}
+
+.border-sides {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+
 .noodle-preview-panel {
   display: flex;
   flex-direction: column;
@@ -1787,4 +1823,93 @@ code {
     width: 100%;
     justify-content: flex-end;
   }
+}
+
+.border-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(22, 26, 31, 0.6);
+}
+
+.border-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.border-section-head span {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.border-side-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 28px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text);
+  background: rgba(30, 35, 42, 0.9);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.border-side-btn:hover:not(:disabled) {
+  border-color: var(--accent);
+}
+
+.border-side-btn.active {
+  color: #0d1117;
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.border-side-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.guide-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.guide-snap {
+  padding: 1px 6px;
+  font-size: 11px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+}
+
+.guide-snap.on {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.preview-guide {
+  position: absolute;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(56, 189, 248, 0.9);
+}
+
+.preview-guide.dragging {
+  box-shadow: 0 0 0 2px rgba(56, 189, 248, 1);
 }

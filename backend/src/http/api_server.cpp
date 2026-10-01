@@ -904,6 +904,102 @@ void ApiServer::registerRoutes() {
                  respondJson(res, std::move(response));
                });
 
+  server_.Post("/api/skin/image/local/border-line",
+               [](const httplib::Request& req, httplib::Response& res) {
+                 json body;
+                 try {
+                   body = json::parse(req.body);
+                 } catch (...) {
+                   respondError(res, 400, "请求体不是有效 JSON");
+                   return;
+                 }
+                 auto workId = body.value("workId", "");
+                 if (workId.empty()) {
+                   respondError(res, 400, "缺少 workId");
+                   return;
+                 }
+                 auto sideName = body.value("side", "");
+                 int side = -1;
+                 if (sideName == "top") {
+                   side = 0;
+                 } else if (sideName == "bottom") {
+                   side = 1;
+                 } else if (sideName == "left") {
+                   side = 2;
+                 } else if (sideName == "right") {
+                   side = 3;
+                 }
+                 if (side < 0) {
+                   respondError(res, 400, "边线方向无效");
+                   return;
+                 }
+                 auto numberOr = [&body](const char* key, int fallback) {
+                   return body.contains(key) && body[key].is_number()
+                              ? body[key].get<int>()
+                              : fallback;
+                 };
+                 PngLineOptions options;
+                 options.side = side;
+                 options.position = numberOr("position", -1);
+                 options.width = numberOr("width", 1);
+                 options.r = numberOr("r", 255);
+                 options.g = numberOr("g", 255);
+                 options.b = numberOr("b", 255);
+                 options.a = numberOr("a", 255);
+                 PngMetrics metrics;
+                 std::string error;
+                 if (!WorkSession::drawLine(workId, options, metrics, error)) {
+                   respondError(res, 400, error);
+                   return;
+                 }
+                 json response = {
+                     {"ok", true},
+                     {"metrics", pngMetricsToJson(metrics)},
+                     {"canUndo", true},
+                     {"canRedo", false},
+                 };
+                 respondJson(res, std::move(response));
+               });
+
+  server_.Post("/api/skin/image/local/profile",
+               [](const httplib::Request& req, httplib::Response& res) {
+                 json body;
+                 try {
+                   body = json::parse(req.body);
+                 } catch (...) {
+                   respondError(res, 400, "请求体不是有效 JSON");
+                   return;
+                 }
+                 auto workId = body.value("workId", "");
+                 if (workId.empty()) {
+                   respondError(res, 400, "缺少 workId");
+                   return;
+                 }
+                 PngContentProfile profile;
+                 std::string error;
+                 if (!WorkSession::contentProfile(workId, profile, error)) {
+                   respondError(res, 400, error);
+                   return;
+                 }
+                 json response = {
+                     {"ok", true},
+                     {"width", profile.width},
+                     {"height", profile.height},
+                     {"hasContent", profile.hasContent},
+                     {"content",
+                      {{"minX", profile.minX},
+                       {"maxX", profile.maxX},
+                       {"minY", profile.minY},
+                       {"maxY", profile.maxY}}},
+                     {"edges",
+                      {{"left", profile.leftEdges},
+                       {"right", profile.rightEdges},
+                       {"top", profile.topEdges},
+                       {"bottom", profile.bottomEdges}}},
+                 };
+                 respondJson(res, std::move(response));
+               });
+
   auto localHistoryEndpoint =
       [](httplib::Response& res, const httplib::Request& req,
          bool isUndo) {

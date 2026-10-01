@@ -1,7 +1,7 @@
 $ErrorActionPreference = 'Stop'
 
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$exe = Join-Path $root 'build\ManiaSkinEditor-0.1.3.exe'
+$exe = Join-Path $root 'build\ManiaSkinEditor-0.1.4.exe'
 $portFile = Join-Path $env:TEMP 'mania_port.txt'
 $testSkin = Join-Path $env:TEMP 'mania_skin_editor_test_skin'
 $outerRoot = (Resolve-Path (Join-Path (Join-Path $root '..') '..')).Path
@@ -195,6 +195,56 @@ try {
     throw 'redo to latest state should enable undo and disable redo'
   }
 
+  $preBorder = $localRedo.metrics
+
+  $lineProfile = Invoke-RestMethod -Method Post -Uri "$base/api/skin/image/local/profile" -ContentType 'application/json' -Body $undoBody
+  Write-Output "local.profile ok=$($lineProfile.ok) size=$($lineProfile.width)x$($lineProfile.height) hasContent=$($lineProfile.hasContent) bbox=$($lineProfile.content.minX),$($lineProfile.content.minY),$($lineProfile.content.maxX),$($lineProfile.content.maxY) edges=$($lineProfile.edges.left.Count),$($lineProfile.edges.right.Count),$($lineProfile.edges.top.Count),$($lineProfile.edges.bottom.Count)"
+  if (-not $lineProfile.ok) {
+    throw 'local profile failed'
+  }
+  if ($lineProfile.width -ne $preBorder.width -or $lineProfile.height -ne $preBorder.height) {
+    throw 'local profile size does not match the work image'
+  }
+  if (-not $lineProfile.hasContent) {
+    throw 'local profile should report content'
+  }
+  if ($lineProfile.content.minX -lt 0 -or $lineProfile.content.maxX -ge $lineProfile.width -or $lineProfile.content.minY -lt 0 -or $lineProfile.content.maxY -ge $lineProfile.height) {
+    throw 'local profile bounding box out of range'
+  }
+  $bottomLineBody = @{ workId = $workId; side = 'bottom'; position = ($lineProfile.height - 1); width = 3; r = 0; g = 0; b = 255; a = 255 } | ConvertTo-Json
+  $bottomLine = Invoke-RestMethod -Method Post -Uri "$base/api/skin/image/local/border-line" -ContentType 'application/json' -Body $bottomLineBody
+  Write-Output "local.borderLine side=bottom bottom=$($bottomLine.metrics.bottomSpacing) top=$($bottomLine.metrics.topSpacing) canUndo=$($bottomLine.canUndo) canRedo=$($bottomLine.canRedo)"
+  if (-not $bottomLine.ok -or $bottomLine.metrics.bottomSpacing -ne 0 -or $bottomLine.canUndo -ne $true -or $bottomLine.canRedo -ne $false) {
+    throw 'single border line draw failed'
+  }
+  $lineUndo = Invoke-RestMethod -Method Post -Uri "$base/api/skin/image/local/undo" -ContentType 'application/json' -Body $undoBody
+  Write-Output "local.borderLine.undo bottom=$($lineUndo.metrics.bottomSpacing) expect=$($preBorder.bottomSpacing) canRedo=$($lineUndo.canRedo)"
+  if ($lineUndo.metrics.bottomSpacing -ne $preBorder.bottomSpacing -or $lineUndo.canRedo -ne $true) {
+    throw 'border line undo did not restore the previous image'
+  }
+  $lineRedo = Invoke-RestMethod -Method Post -Uri "$base/api/skin/image/local/redo" -ContentType 'application/json' -Body $undoBody
+  if ($lineRedo.metrics.bottomSpacing -ne 0 -or $lineRedo.canUndo -ne $true) {
+    throw 'border line redo did not restore the line'
+  }
+  Write-Output 'local.borderLine.undoRedo=True'
+  $lineBadSideRejected = $false
+  try {
+    $lineBadSideBody = @{ workId = $workId; side = 'middle'; position = 0; width = 2; r = 0; g = 0; b = 0; a = 255 } | ConvertTo-Json
+    Invoke-RestMethod -Method Post -Uri "$base/api/skin/image/local/border-line" -ContentType 'application/json' -Body $lineBadSideBody | Out-Null
+  } catch {
+    $lineBadSideRejected = $true
+  }
+  $lineBadPosRejected = $false
+  try {
+    $lineBadPosBody = @{ workId = $workId; side = 'bottom'; position = ($lineProfile.height + 4); width = 2; r = 0; g = 0; b = 0; a = 255 } | ConvertTo-Json
+    Invoke-RestMethod -Method Post -Uri "$base/api/skin/image/local/border-line" -ContentType 'application/json' -Body $lineBadPosBody | Out-Null
+  } catch {
+    $lineBadPosRejected = $true
+  }
+  Write-Output "local.borderLine.reject badSide=$lineBadSideRejected badPosition=$lineBadPosRejected"
+  if (-not $lineBadSideRejected -or -not $lineBadPosRejected) {
+    throw 'invalid border line requests should be rejected'
+  }
   $saveWorkBody = @{ workId = $workId; path = $testSkin; name = 'generated_test.png'; targetName = 'local_saved.png'; top = 0; left = 0; right = 0; alphaValue = 255; alphaScalePercent = 100 } | ConvertTo-Json
   $savedWork = Invoke-RestMethod -Method Post -Uri "$base/api/skin/image/save-working" -ContentType 'application/json' -Body $saveWorkBody
   $savedExists = Test-Path -LiteralPath (Join-Path $testSkin 'local_saved.png')

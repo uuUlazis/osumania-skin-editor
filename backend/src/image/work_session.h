@@ -25,6 +25,13 @@ class WorkSession {
                         const ImageRect& target, PngMetrics& metrics,
                         std::string& error);
 
+  static bool drawLine(const std::string& workId,
+                       const PngLineOptions& options, PngMetrics& metrics,
+                       std::string& error);
+
+  static bool contentProfile(const std::string& workId,
+                             PngContentProfile& profile, std::string& error);
+
   static bool undo(const std::string& workId, PngMetrics& metrics,
                    std::string& error);
   static bool redo(const std::string& workId, PngMetrics& metrics,

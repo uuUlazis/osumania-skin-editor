@@ -21,6 +21,20 @@ export interface FieldSpec {
   requiresVersion25: boolean;
 }
 
+export interface LocalProfile {
+  ok: boolean;
+  width: number;
+  height: number;
+  hasContent: boolean;
+  content: { minX: number; maxX: number; minY: number; maxY: number };
+  edges: {
+    left: number[];
+    right: number[];
+    top: number[];
+    bottom: number[];
+  };
+}
+
 export interface SkinInfo {
   name: string;
   path: string;
@@ -322,6 +336,7 @@ export const api = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ workId, ...options }),
     });
+
     if (!response.ok) {
       let message = '生成修改预览失败';
       try {
@@ -383,6 +398,36 @@ export const api = {
         }),
       },
     ),
+
+  drawBorderLineLocal: (
+    workId: string,
+    options: {
+      side: 'top' | 'bottom' | 'left' | 'right';
+      position: number;
+      width: number;
+      r: number;
+      g: number;
+      b: number;
+      a: number;
+    },
+  ) =>
+    request<{
+      ok: boolean;
+      metrics: PngMetrics;
+      canUndo: boolean;
+      canRedo: boolean;
+    }>('/api/skin/image/local/border-line', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workId, ...options }),
+    }),
+
+  localProfile: (workId: string) =>
+    request<LocalProfile>('/api/skin/image/local/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ workId }),
+    }),
 
   undoLocal: (workId: string) =>
     request<{
